@@ -123,7 +123,9 @@ export default function PredictorPage() {
     setData(null);
     setSuggestions([]);
     try {
-      const res = await axios.get(`http://localhost:5000/api/predict/${t}`);
+      const res = await axios.get(
+        `https://techtrend-ai-react-web-app-final-project.onrender.com/api/predict/${t}`,
+      );
       const rawData = res.data.raw || res.data;
       if (!rawData || typeof rawData !== "string")
         throw new Error("Bad response format");
@@ -166,11 +168,14 @@ export default function PredictorPage() {
 
   const addToWatchlist = async () => {
     try {
-      await axios.post("http://localhost:5000/api/watchlist", {
-        ticker: data.ticker,
-        price: data.price,
-        verdict: data.verdict,
-      });
+      await axios.post(
+        "https://techtrend-ai-react-web-app-final-project.onrender.com/api/watchlist",
+        {
+          ticker: data.ticker,
+          price: data.price,
+          verdict: data.verdict,
+        },
+      );
       alert(`⭐ ${data.ticker} added to watchlist!`);
     } catch {
       alert("Error saving to watchlist.");

@@ -16,7 +16,7 @@ import {
   Line,
 } from "recharts";
 
-const API = "http://localhost:5000";
+const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
 
 const STRIP_TICKERS = ["SPY", "QQQ", "DIA", "NVDA", "TSLA"];
 

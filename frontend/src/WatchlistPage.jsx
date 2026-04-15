@@ -21,7 +21,7 @@ import {
   Tooltip,
 } from "recharts";
 
-const API = "http://localhost:5000";
+  const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
 
 // ── Verdict config (matches PredictorPage) ───────────────────────────────────
 const VERDICT_STYLE = {

@@ -12,7 +12,7 @@ import axios from "axios";
 import { Trash2, Download, RotateCcw, ClipboardList } from "lucide-react";
 
 
-const API = "http://localhost:5000";
+const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
 
 const VERDICT_STYLE = {
   BUY:     "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
