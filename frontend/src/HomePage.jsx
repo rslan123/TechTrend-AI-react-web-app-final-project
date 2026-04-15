@@ -15,10 +15,9 @@ import {
   LineChart,
   Line,
 } from "recharts";
-
 const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
 
-const STRIP_TICKERS = ["SPY", "QQQ", "DIA", "NVDA", "TSLA"];
+const STRIP_TICKERS = ["NVDA", "TSLA"];
 
 const VERDICT_STYLE = {
   BUY:     { color: "#10b981", bg: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" },
