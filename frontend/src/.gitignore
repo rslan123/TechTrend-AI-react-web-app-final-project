@@ -1,0 +1,8 @@
+# .gitignore
+node_modules/
+dist/
+models/
+prediction_log.csv
+*.pkl
+__pycache__/
+.env
