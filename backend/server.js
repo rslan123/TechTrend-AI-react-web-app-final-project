@@ -6,7 +6,11 @@ const { setupDb } = require('./database');
 const app = express();
 const port = 5000;
 
-app.use(cors());
+app.use(cors({
+    origin: ['https://proj.ruppin.ac.il', 'http://localhost:3000'],
+    methods: ['GET', 'POST', 'DELETE'],
+    credentials: true
+}));
 app.use(express.json());
 
 let db;
@@ -20,7 +24,7 @@ app.get('/api/predict/:ticker', (req, res) => {
     const ticker = req.params.ticker.toUpperCase();
     const source = req.query.source || "manual"; // "manual" or "auto"
  
-    const pythonProcess = spawn('python', ['predictor.py', ticker, source]);
+    const pythonProcess = spawn('python3', ['predictor.py', ticker, source]);
  
     let result = '';
  
