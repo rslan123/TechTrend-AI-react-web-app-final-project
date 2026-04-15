@@ -48,14 +48,25 @@ function StripCard({ ticker }) {
 
   useEffect(() => {
     let cancelled = false;
-    axios.get(`${API}/api/predict/${ticker}?source=auto`)
-      .then((res) => {
-        if (cancelled) return;
-        const raw = res.data.raw || res.data;
-        setData(parseResult(typeof raw === "string" ? raw : null));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    // Each card waits a bit longer than the previous one
+    const index = STRIP_TICKERS.indexOf(ticker);
+    const delay = index * 2000; // 0ms, 2s, 4s, 6s, 8s
+
+    const timer = setTimeout(() => {
+      axios
+        .get(`${API}/api/predict/${ticker}?source=auto`)
+        .then((res) => {
+          if (cancelled) return;
+          const raw = res.data.raw || res.data;
+          setData(parseResult(typeof raw === "string" ? raw : null));
+        })
+        .catch(() => {});
+    }, delay);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [ticker]);
 
   const vstyle   = VERDICT_STYLE[data?.verdict] ?? VERDICT_STYLE.NO_EDGE;
