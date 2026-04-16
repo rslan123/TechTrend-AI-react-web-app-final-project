@@ -1,13 +1,10 @@
 """
 Stock Price Direction Predictor
 ================================
-Base: Version 2 (60d hourly, cleaner structure)
-
-IMPORTANT NOTES (read before using):.
+Base: Version 2 60d hourly
+פרויקט גמר Data
  The model retrains once per day per ticker (cached to disk).
-   Delete the models/ folder to force a full retrain.
- All predictions are logged to prediction_log.csv so you can
-   review over time whether BUY/SELL signals were actually correct.
+  
 """
 
 import sys
