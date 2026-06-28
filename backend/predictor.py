@@ -292,7 +292,16 @@ def run_prediction(ticker: str, horizon: str = DEFAULT_HORIZON,
         cv_accuracy = cross_validate(X_model, y_model)
 
         # 5. Build chart data (last 20 bars for the frontend chart)
-        history = df.tail(20)
+        CHART_BARS = {
+            "1h":  20,   # last 20 hours
+            "1d":  20,   # last 20 hours (same interval)
+            "1wk": 30,   # last 30 trading days
+            "1mo": 60,   # last 60 trading days (~3 months)
+            "6mo": 52,   # last 52 weeks (~1 year)
+            "1y":  104,  # last 104 weeks (~2 years)
+            }
+        
+        history = df.tail(CHART_BARS[horizon])
         times  = ",".join([
             t.strftime('%b %d %H:%M') for t in history.index
         ])
