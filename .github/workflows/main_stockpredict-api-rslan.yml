@@ -36,7 +36,7 @@ jobs:
       - name: Zip the deployment package
         working-directory: backend
         run: |
-          zip -r ../deploy.zip . --exclude "*.git*"
+          zip -r deploy.zip . --exclude "*.git*"
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -50,4 +50,4 @@ jobs:
         with:
           app-name: 'stockpredict-api-rslan'
           slot-name: 'Production'
-          package: ../deploy.zip
+          package: backend/deploy.zip
