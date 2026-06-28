@@ -10,6 +10,7 @@ Base: Version 2 60d hourly
 import sys
 import os
 import csv
+import time
 import joblib
 import warnings
 import numpy as np
@@ -32,7 +33,46 @@ BUY_THRESHOLD  = 0.60
 SELL_THRESHOLD = 0.40
 FETCH_PERIOD   = "60d"
 MODEL_DIR      = "models"
+DATA_DIR       = "data_cache"
 LOG_FILE       = "prediction_log.csv"
+
+
+# ─────────────────────────────────────────────
+# DATA FETCHING WITH CACHE + RETRY
+# ─────────────────────────────────────────────
+
+def fetch_cached(ticker: str, period: str, interval: str,
+                 retries: int = 3, wait: int = 5) -> pd.DataFrame:
+    """
+    Fetch OHLCV data for a ticker.
+    - Caches to disk once per day — avoids hitting Yahoo Finance repeatedly.
+    - Retries up to 3 times with a 5-second wait if rate limited.
+    """
+    os.makedirs(DATA_DIR, exist_ok=True)
+    cache_path = os.path.join(DATA_DIR,
+                              f"{ticker}_{date.today()}_{interval}.pkl")
+
+    # Return cached data if it exists for today
+    if os.path.exists(cache_path):
+        return joblib.load(cache_path)
+
+    # Otherwise fetch from Yahoo Finance with retry
+    for attempt in range(retries):
+        try:
+            data = yf.download(ticker, period=period,
+                               interval=interval, progress=False)
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+            if not data.empty:
+                joblib.dump(data, cache_path)
+                return data
+        except Exception:
+            pass
+        # Wait before retrying
+        if attempt < retries - 1:
+            time.sleep(wait)
+
+    return pd.DataFrame()
 
 
 # ─────────────────────────────────────────────
@@ -133,10 +173,8 @@ FEATURE_COLS = ['SMA_20', 'Price_vs_SMA', 'RSI', 'ROC_5',
 
 def run_prediction(ticker: str, source: str = "manual"):
     try:
-        # 1. Fetch
-        data = yf.download(ticker, period=FETCH_PERIOD, interval="1h", progress=False)
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
+        # 1. Fetch (cached + retry)
+        data = fetch_cached(ticker, FETCH_PERIOD, "1h")
         if data.empty:
             print("ERROR|Invalid ticker or no data returned")
             return
@@ -206,4 +244,3 @@ if __name__ == "__main__":
     else:
         print("Usage: python predictor.py TICKER [source]")
         print("Example: python predictor.py AAPL manual")
- 
