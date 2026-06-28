@@ -1,10 +1,22 @@
 """
 Stock Price Direction Predictor
 ================================
-Base: Version 2 60d hourly
+Base: Version 3 — Multi-Horizon
 פרויקט גמר Data
- The model retrains once per day per ticker (cached to disk).
-  
+The model retrains once per day per ticker+horizon (cached to disk).
+
+Supported horizons:
+  1h   → next hour        (1h bars,  60d history)
+  1d   → next day         (1d bars,  1y  history)
+  1wk  → next week        (1wk bars, 5y  history)
+  1mo  → next month       (1mo bars, 10y history)
+  6mo  → next 6 months    (1mo bars, 10y history, shift=6)
+  1y   → next year        (1mo bars, 10y history, shift=12)
+
+API usage:
+  python predictor.py AAPL 1h manual
+  python predictor.py AAPL 1d manual
+  python predictor.py TSLA 1wk auto
 """
 
 import sys
@@ -24,17 +36,33 @@ from sklearn.metrics import accuracy_score
 
 warnings.filterwarnings("ignore")
 
+
 # ─────────────────────────────────────────────
 # CONFIGURATION
 # ─────────────────────────────────────────────
 
-MIN_ACCURACY   = 0.53   # Below this → output NO_EDGE instead of BUY/SELL
+MIN_ACCURACY   = 0.53
 BUY_THRESHOLD  = 0.60
 SELL_THRESHOLD = 0.40
-FETCH_PERIOD   = "60d"
 MODEL_DIR      = "models"
 DATA_DIR       = "data_cache"
 LOG_FILE       = "prediction_log.csv"
+
+# Each horizon defines:
+#   interval → yfinance bar size
+#   period   → how much history to fetch
+#   shift    → how many bars ahead to predict (1 bar = 1 interval)
+#   min_rows → minimum rows needed after feature calculation
+HORIZONS = {
+    "1h":  {"interval": "1h",  "period": "60d",  "shift": 1,  "min_rows": 100},
+    "1d":  {"interval": "1d",  "period": "1y",   "shift": 1,  "min_rows": 60},
+    "1wk": {"interval": "1wk", "period": "5y",   "shift": 1,  "min_rows": 60},
+    "1mo": {"interval": "1mo", "period": "10y",  "shift": 1,  "min_rows": 40},
+    "6mo": {"interval": "1mo", "period": "10y",  "shift": 6,  "min_rows": 40},
+    "1y":  {"interval": "1mo", "period": "10y",  "shift": 12, "min_rows": 40},
+}
+
+DEFAULT_HORIZON = "1h"
 
 
 # ─────────────────────────────────────────────
@@ -45,18 +73,18 @@ def fetch_cached(ticker: str, period: str, interval: str,
                  retries: int = 3, wait: int = 5) -> pd.DataFrame:
     """
     Fetch OHLCV data for a ticker.
-    - Caches to disk once per day — avoids hitting Yahoo Finance repeatedly.
+    - Caches to disk once per day — avoids Yahoo Finance rate limits.
     - Retries up to 3 times with a 5-second wait if rate limited.
     """
     os.makedirs(DATA_DIR, exist_ok=True)
     cache_path = os.path.join(DATA_DIR,
-                              f"{ticker}_{date.today()}_{interval}.pkl")
+                              f"{ticker}_{date.today()}_{interval}_{period}.pkl")
 
-    # Return cached data if it exists for today
+    # Return cached data if already fetched today
     if os.path.exists(cache_path):
         return joblib.load(cache_path)
 
-    # Otherwise fetch from Yahoo Finance with retry
+    # Fetch from Yahoo Finance with retry
     for attempt in range(retries):
         try:
             data = yf.download(ticker, period=period,
@@ -68,7 +96,6 @@ def fetch_cached(ticker: str, period: str, interval: str,
                 return data
         except Exception:
             pass
-        # Wait before retrying
         if attempt < retries - 1:
             time.sleep(wait)
 
@@ -79,7 +106,12 @@ def fetch_cached(ticker: str, period: str, interval: str,
 # FEATURE ENGINEERING
 # ─────────────────────────────────────────────
 
-def calculate_features(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_features(df: pd.DataFrame, include_hour: bool = True) -> pd.DataFrame:
+    """
+    Calculate technical features from OHLCV data.
+    include_hour=False for daily/weekly/monthly bars
+    where hour of day has no meaning.
+    """
     df = df.copy()
 
     # Trend
@@ -101,11 +133,20 @@ def calculate_features(df: pd.DataFrame) -> pd.DataFrame:
     # Volume
     df['Volume_Ratio'] = df['Volume'] / (df['Volume'].rolling(20).mean() + 1e-9)
 
-    # Time of day
-    df['Hour'] = df.index.hour
+    # Time of day — only meaningful for intraday (hourly) bars
+    if include_hour:
+        df['Hour'] = df.index.hour
 
     df.dropna(inplace=True)
     return df
+
+
+def get_feature_cols(include_hour: bool = True) -> list:
+    base = ['SMA_20', 'Price_vs_SMA', 'RSI', 'ROC_5',
+            'ATR', 'BB_position', 'Volume_Ratio']
+    if include_hour:
+        base.append('Hour')
+    return base
 
 
 # ─────────────────────────────────────────────
@@ -129,12 +170,13 @@ def cross_validate(X: pd.DataFrame, y: pd.Series, n_splits: int = 5) -> float:
 # MODEL CACHING
 # ─────────────────────────────────────────────
 
-def get_model_path(ticker: str) -> str:
+def get_model_path(ticker: str, horizon: str) -> str:
     os.makedirs(MODEL_DIR, exist_ok=True)
-    return os.path.join(MODEL_DIR, f"{ticker}_{date.today()}.pkl")
+    return os.path.join(MODEL_DIR, f"{ticker}_{horizon}_{date.today()}.pkl")
 
-def load_or_train_model(ticker: str, X: pd.DataFrame, y: pd.Series):
-    path = get_model_path(ticker)
+def load_or_train_model(ticker: str, horizon: str,
+                        X: pd.DataFrame, y: pd.Series):
+    path = get_model_path(ticker, horizon)
     if os.path.exists(path):
         return joblib.load(path), False
     m = xgb.XGBClassifier(
@@ -150,16 +192,17 @@ def load_or_train_model(ticker: str, X: pd.DataFrame, y: pd.Series):
 # PREDICTION LOGGING
 # ─────────────────────────────────────────────
 
-def log_prediction(ticker, price, verdict, confidence, cv_accuracy, source="manual"):
+def log_prediction(ticker, horizon, price, verdict,
+                   confidence, cv_accuracy, source="manual"):
     file_exists = os.path.exists(LOG_FILE)
     with open(LOG_FILE, "a", newline="") as f:
         w = csv.writer(f)
         if not file_exists:
-            w.writerow(["timestamp", "ticker", "price",
+            w.writerow(["timestamp", "ticker", "horizon", "price",
                         "verdict", "confidence_pct", "cv_accuracy_pct", "source"])
         w.writerow([
             datetime.now().strftime("%Y-%m-%d %H:%M"),
-            ticker, f"{price:.2f}", verdict,
+            ticker, horizon, f"{price:.2f}", verdict,
             f"{confidence:.1f}", f"{cv_accuracy * 100:.1f}", source
         ])
 
@@ -168,35 +211,45 @@ def log_prediction(ticker, price, verdict, confidence, cv_accuracy, source="manu
 # MAIN
 # ─────────────────────────────────────────────
 
-FEATURE_COLS = ['SMA_20', 'Price_vs_SMA', 'RSI', 'ROC_5',
-                'ATR', 'BB_position', 'Volume_Ratio', 'Hour']
-
-def run_prediction(ticker: str, source: str = "manual"):
+def run_prediction(ticker: str, horizon: str = DEFAULT_HORIZON,
+                   source: str = "manual"):
     try:
+        # 0. Validate horizon
+        if horizon not in HORIZONS:
+            print(f"ERROR|Invalid horizon '{horizon}'. "
+                  f"Choose from: {', '.join(HORIZONS.keys())}")
+            return
+
+        cfg          = HORIZONS[horizon]
+        interval     = cfg["interval"]
+        period       = cfg["period"]
+        shift        = cfg["shift"]
+        min_rows     = cfg["min_rows"]
+        include_hour = (interval == "1h")   # Hour feature only for intraday
+
         # 1. Fetch (cached + retry)
-        data = fetch_cached(ticker, FETCH_PERIOD, "1h")
+        data = fetch_cached(ticker, period, interval)
         if data.empty:
             print("ERROR|Invalid ticker or no data returned")
             return
 
         # 2. Features
-        df = calculate_features(data)
-        if len(df) < 100:
-            print("ERROR|Not enough data (need at least 100 rows after dropna)")
+        df = calculate_features(data, include_hour=include_hour)
+        if len(df) < min_rows:
+            print(f"ERROR|Not enough data "
+                  f"(need at least {min_rows} rows after dropna, got {len(df)})")
             return
 
         # 3. X and y
-        X = df[FEATURE_COLS]
-        y = (df['Close'].shift(-1) > df['Close']).astype(int)
+        feature_cols = get_feature_cols(include_hour=include_hour)
+        X = df[feature_cols]
+        y = (df['Close'].shift(-shift) > df['Close']).astype(int)
 
         # 4. Validate
-        cv_accuracy = cross_validate(X.iloc[:-1], y.iloc[:-1])
+        cv_accuracy = cross_validate(X.iloc[:-shift], y.iloc[:-shift])
 
-        # 5. Build chart data (used by both the NO_EDGE and normal path)
+        # 5. Build chart data
         history = df.tail(20)
-        # No comma inside the timestamp — "Oct 24 14:00" not "Oct 24, 14:00"
-        # This is critical: commas are used to separate values in the list,
-        # so having a comma inside a timestamp would break parsing on the frontend.
         times  = ",".join([t.strftime('%b %d %H:%M') for t in history.index])
         prices = ",".join([f"{v:.2f}" for v in history['Close'].values.flatten()])
         smas   = ",".join([f"{v:.2f}" for v in history['SMA_20'].values.flatten()])
@@ -206,13 +259,15 @@ def run_prediction(ticker: str, source: str = "manual"):
 
         # 6. Confidence gate
         if cv_accuracy < MIN_ACCURACY:
-            log_prediction(ticker, price, "NO_EDGE", 0.0, cv_accuracy, source)
+            log_prediction(ticker, horizon, price, "NO_EDGE",
+                           0.0, cv_accuracy, source)
             print(f"RESULT|{ticker}|{price:.2f}|NO_EDGE|N/A"
-                  f"|{cv_accuracy * 100:.1f}%|{times}|{prices}|{smas}|{rsi_val:.1f}")
+                  f"|{cv_accuracy * 100:.1f}%|{times}|{prices}|{smas}"
+                  f"|{rsi_val:.1f}|{horizon}")
             return
 
         # 7. Train / load model
-        model, _ = load_or_train_model(ticker, X, y)
+        model, _ = load_or_train_model(ticker, horizon, X, y)
 
         # 8. Predict
         proba = float(model.predict_proba(X.tail(1))[0][1])
@@ -224,12 +279,14 @@ def run_prediction(ticker: str, source: str = "manual"):
         confidence = round(proba * 100, 1)
 
         # 9. Log + output
-        # Final pipe format — 10 fields, index shown for frontend reference:
-        # RESULT | TICKER | PRICE | VERDICT | CONF% | CV_ACC% | TIMES | PRICES | SMAS | RSI
-        #   [0]     [1]     [2]      [3]      [4]      [5]      [6]     [7]     [8]   [9]
-        log_prediction(ticker, price, verdict, confidence, cv_accuracy, source)
+        # Final pipe format — 11 fields:
+        # RESULT | TICKER | PRICE | VERDICT | CONF% | CV_ACC% | TIMES | PRICES | SMAS | RSI | HORIZON
+        #   [0]     [1]     [2]      [3]      [4]      [5]      [6]     [7]     [8]   [9]    [10]
+        log_prediction(ticker, horizon, price, verdict,
+                       confidence, cv_accuracy, source)
         print(f"RESULT|{ticker}|{price:.2f}|{verdict}|{confidence}%"
-              f"|{cv_accuracy * 100:.1f}%|{times}|{prices}|{smas}|{rsi_val:.1f}")
+              f"|{cv_accuracy * 100:.1f}%|{times}|{prices}|{smas}"
+              f"|{rsi_val:.1f}|{horizon}")
 
     except Exception as e:
         print(f"ERROR|{str(e)}")
@@ -237,10 +294,12 @@ def run_prediction(ticker: str, source: str = "manual"):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        ticker_arg = sys.argv[1].upper().strip()
-        # Second argument is the source ("manual" or "auto"). Default to "manual".
-        source_arg = sys.argv[2].strip() if len(sys.argv) > 2 else "manual"
-        run_prediction(ticker_arg, source_arg)
+        ticker_arg  = sys.argv[1].upper().strip()
+        horizon_arg = sys.argv[2].strip() if len(sys.argv) > 2 else DEFAULT_HORIZON
+        source_arg  = sys.argv[3].strip() if len(sys.argv) > 3 else "manual"
+        run_prediction(ticker_arg, horizon_arg, source_arg)
     else:
-        print("Usage: python predictor.py TICKER [source]")
-        print("Example: python predictor.py AAPL manual")
+        print("Usage: python predictor.py TICKER [horizon] [source]")
+        print("Example: python predictor.py AAPL 1h manual")
+        print("Example: python predictor.py TSLA 1d auto")
+        print(f"Horizons: {', '.join(HORIZONS.keys())}")
