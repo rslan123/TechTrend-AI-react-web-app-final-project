@@ -4,7 +4,7 @@ const cors = require('cors');
 const { setupDb } = require('./database');
 
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000;
 
 app.use(cors({
     origin: ['https://proj.ruppin.ac.il', 'http://localhost:3000'],
