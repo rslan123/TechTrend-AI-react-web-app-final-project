@@ -31,7 +31,13 @@ setupDb().then(database => {
 // HELPER — run predictor.py and return the RESULT|... line
 // ─────────────────────────────────────────────────────────────────
 function runPredictor(args, res) {
-    const pythonProcess = spawn('python3', ['predictor.py', ...args]);
+    const pythonProcess = spawn('python3', ['predictor.py', ...args], {
+    cwd: __dirname,
+    env: {
+        ...process.env,
+        PYTHONPATH: '/home/site/wwwroot/python_packages/lib/site-packages'
+    }
+});
 
     let result = '';
 
