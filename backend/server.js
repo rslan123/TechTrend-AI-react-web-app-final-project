@@ -13,6 +13,14 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// ─────────────────────────────────────────────────────────────────
+// HEALTH CHECK — Used by UptimeRobot to keep Render awake
+// ─────────────────────────────────────────────────────────────────
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
+
+
 let db;
 setupDb().then(database => {
     db = database;
