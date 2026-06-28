@@ -28,13 +28,21 @@ jobs:
       - name: Install Python dependencies into package folder
         working-directory: backend
         run: |
-          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+          mkdir -p .python_packages/lib/site-packages
+          pip install -r requirements.txt \
+            --target=".python_packages/lib/site-packages" \
+            --no-cache-dir
 
       - name: Install Node dependencies
         working-directory: backend
         run: |
           npm install
           npm rebuild sqlite3
+
+      - name: Verify Python packages exist
+        working-directory: backend
+        run: |
+          ls .python_packages/lib/site-packages | head -20
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -54,6 +62,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+
+      - name: Verify packages in artifact
+        run: |
+          ls .python_packages/lib/site-packages | head -20
 
       - name: Login to Azure
         uses: azure/login@v2
