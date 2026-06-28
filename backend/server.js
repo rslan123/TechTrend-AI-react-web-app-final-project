@@ -19,48 +19,85 @@ setupDb().then(database => {
     console.log("SQL Database is Ready!");
 });
 
-// 1. Existing Prediction Route
-app.get('/api/predict/:ticker', (req, res) => {
-    const ticker = req.params.ticker.toUpperCase();
-    const source = req.query.source || "manual"; // "manual" or "auto"
- 
-    const pythonProcess = spawn('python3', ['predictor.py', ticker, source]);
- 
+// ─────────────────────────────────────────────────────────────────
+// HELPER — run predictor.py and return the RESULT|... line
+// ─────────────────────────────────────────────────────────────────
+function runPredictor(args, res) {
+    const pythonProcess = spawn('python3', ['predictor.py', ...args]);
+
     let result = '';
- 
+
     pythonProcess.stdout.on('data', (data) => {
         result += data.toString();
     });
- 
+
     pythonProcess.stderr.on('data', (data) => {
-        // Capture Python errors for debugging
         console.error(`Python stderr: ${data}`);
     });
- 
+
     pythonProcess.on('close', (code) => {
         const cleanResult = result.trim().split('\n')
             .find(line => line.startsWith('RESULT|') || line.startsWith('ERROR|'));
- 
+
         if (cleanResult && cleanResult.startsWith('RESULT|')) {
             res.json({ raw: cleanResult });
         } else {
-            res.status(500).json({ error: cleanResult || "Python script failed" });
+            res.status(500).json({
+                error: cleanResult || "Python script failed",
+                fullOutput: result
+            });
         }
     });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 1a. Prediction Route — WITH horizon
+//     GET /api/predict/AAPL/1h
+//     GET /api/predict/AAPL/1d
+//     GET /api/predict/AAPL/1wk
+//     GET /api/predict/AAPL/1mo
+//     GET /api/predict/AAPL/6mo
+//     GET /api/predict/AAPL/1y
+// ─────────────────────────────────────────────────────────────────
+app.get('/api/predict/:ticker/:horizon', (req, res) => {
+    const ticker  = req.params.ticker.toUpperCase();
+    const horizon = req.params.horizon.toLowerCase();
+    const source  = req.query.source || "manual";
+
+    const VALID_HORIZONS = ['1h', '1d', '1wk', '1mo', '6mo', '1y'];
+    if (!VALID_HORIZONS.includes(horizon)) {
+        return res.status(400).json({
+            error: `Invalid horizon '${horizon}'. Valid options: ${VALID_HORIZONS.join(', ')}`
+        });
+    }
+
+    runPredictor([ticker, horizon, source], res);
 });
 
-// add to Watchlist
-//  Now accepts price and verdict in the body
+// ─────────────────────────────────────────────────────────────────
+// 1b. Prediction Route — WITHOUT horizon (defaults to 1h)
+//     GET /api/predict/AAPL
+//     Kept for backwards compatibility with existing frontend calls
+// ─────────────────────────────────────────────────────────────────
+app.get('/api/predict/:ticker', (req, res) => {
+    const ticker = req.params.ticker.toUpperCase();
+    const source = req.query.source || "manual";
+
+    runPredictor([ticker, '1h', source], res);
+});
+
+// ─────────────────────────────────────────────────────────────────
+// 2. Add to Watchlist
+// ─────────────────────────────────────────────────────────────────
 app.post('/api/watchlist', async (req, res) => {
     const { ticker, price, verdict } = req.body;
     try {
-        // This stops the "7 duplicates" issue
         await db.run(
             `INSERT INTO watchlist (ticker, price, verdict) 
              VALUES (?, ?, ?) 
              ON CONFLICT(ticker) DO UPDATE SET 
              price=excluded.price, 
-             verdict=excluded.verdict`, 
+             verdict=excluded.verdict`,
             [ticker, price, verdict]
         );
         res.json({ success: true, message: "Saved/Updated in SQL!" });
@@ -70,14 +107,17 @@ app.post('/api/watchlist', async (req, res) => {
     }
 });
 
-// 3. NEW: Get Watchlist
+// ─────────────────────────────────────────────────────────────────
+// 3. Get Watchlist
+// ─────────────────────────────────────────────────────────────────
 app.get('/api/watchlist', async (req, res) => {
-    // We use * to get ticker, price, verdict, and id
-    const list = await db.all('SELECT * FROM watchlist'); 
+    const list = await db.all('SELECT * FROM watchlist');
     res.json(list);
 });
 
-// 4. NEW: Delete from Watchlist
+// ─────────────────────────────────────────────────────────────────
+// 4. Delete from Watchlist
+// ─────────────────────────────────────────────────────────────────
 app.delete('/api/watchlist/:ticker', async (req, res) => {
     const ticker = req.params.ticker;
     try {
@@ -89,18 +129,13 @@ app.delete('/api/watchlist/:ticker', async (req, res) => {
     }
 });
 
-
-// this reads prediction_log.csv and returns it as JSON.
-// The CSV is written by predictor.py every time a prediction runs.
-// CSV columns written by predictor.py:
-//   timestamp, ticker, price, verdict, confidence_pct, cv_accuracy_pct
-
+// ─────────────────────────────────────────────────────────────────
+// 5. Get Prediction Log
+// ─────────────────────────────────────────────────────────────────
 const fs   = require('fs');
 const path = require('path');
 
 const LOG_PATH = path.join(__dirname, 'prediction_log.csv');
-//  Adjust this path if prediction_log.csv sits somewhere else.
-//   __dirname is your server/ folder. '..' goes up one level to the project root.
 
 app.get('/api/log', (req, res) => {
     try {
@@ -115,20 +150,39 @@ app.get('/api/log', (req, res) => {
             return res.json([]);
         }
 
-        // Skip header row (index 0), parse the rest
+        // Skip header row, parse the rest
+        // CSV columns: timestamp, ticker, horizon, price, verdict,
+        //              confidence_pct, cv_accuracy_pct, source
         const rows = lines.slice(1).map((line) => {
-            const [timestamp, ticker, price, verdict, confidence_pct, cv_accuracy_pct, source] = line.split(',');
-            return {
-                timestamp, ticker,
-                price: parseFloat(price),
-                verdict,
-                confidence_pct: parseFloat(confidence_pct),
-                cv_accuracy_pct: parseFloat(cv_accuracy_pct),
-                source: source?.trim() ?? "manual",
-            };
+            const parts = line.split(',');
+            // Handle both old format (no horizon) and new format (with horizon)
+            if (parts.length >= 8) {
+                // New format with horizon
+                const [timestamp, ticker, horizon, price, verdict,
+                       confidence_pct, cv_accuracy_pct, source] = parts;
+                return {
+                    timestamp, ticker, horizon,
+                    price:           parseFloat(price),
+                    verdict,
+                    confidence_pct:  parseFloat(confidence_pct),
+                    cv_accuracy_pct: parseFloat(cv_accuracy_pct),
+                    source:          source?.trim() ?? "manual",
+                };
+            } else {
+                // Old format without horizon
+                const [timestamp, ticker, price, verdict,
+                       confidence_pct, cv_accuracy_pct, source] = parts;
+                return {
+                    timestamp, ticker, horizon: '1h',
+                    price:           parseFloat(price),
+                    verdict,
+                    confidence_pct:  parseFloat(confidence_pct),
+                    cv_accuracy_pct: parseFloat(cv_accuracy_pct),
+                    source:          source?.trim() ?? "manual",
+                };
+            }
         });
 
-        // Return newest first
         res.json(rows.reverse());
     } catch (err) {
         console.error('Error reading prediction log:', err);
@@ -136,6 +190,9 @@ app.get('/api/log', (req, res) => {
     }
 });
 
+// ─────────────────────────────────────────────────────────────────
+// 6. Clear Prediction Log
+// ─────────────────────────────────────────────────────────────────
 app.delete('/api/log', (req, res) => {
     try {
         if (fs.existsSync(LOG_PATH)) {
