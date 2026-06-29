@@ -7,7 +7,11 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-    origin: ['https://proj.ruppin.ac.il', 'http://localhost:3000'],
+    origin: [
+        'https://proj.ruppin.ac.il',
+        'http://localhost:3000',
+        'https://tech-trend-ai-react-web-app-final-p.vercel.app'
+    ],
     methods: ['GET', 'POST', 'DELETE'],
     credentials: true
 }));
