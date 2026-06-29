@@ -189,6 +189,8 @@ def cross_validate(X: pd.DataFrame, y: pd.Series,
     tscv   = TimeSeriesSplit(n_splits=n_splits)
     scores = []
     for train_idx, test_idx in tscv.split(X):
+        if len(y.iloc[train_idx].unique()) < 2:
+            continue
         m = xgb.XGBClassifier(
             n_estimators=50, max_depth=3,
             learning_rate=0.1, eval_metric='logloss', verbosity=0
@@ -197,8 +199,7 @@ def cross_validate(X: pd.DataFrame, y: pd.Series,
         scores.append(
             accuracy_score(y.iloc[test_idx], m.predict(X.iloc[test_idx]))
         )
-    return float(np.mean(scores))
-
+    return float(np.mean(scores)) if scores else 0.0
 
 # ─────────────────────────────────────────────
 # MODEL CACHING
