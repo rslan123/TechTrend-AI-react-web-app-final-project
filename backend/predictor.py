@@ -315,6 +315,17 @@ def run_prediction(ticker: str, horizon: str = DEFAULT_HORIZON,
         price   = float(df['Close'].iloc[-1])
         rsi_val = float(df['RSI'].iloc[-1])
 
+        # NEW LINE I ADDED PERSONLYY - Guard: need both classes present to train
+        if len(y_model.unique()) < 2:
+            log_prediction(ticker, horizon, price, "NO_EDGE",
+                           0.0, 0.0, source)
+            print(
+                f"RESULT|{ticker}|{price:.2f}|NO_EDGE|N/A"
+                f"|0.0%|{times}|{prices}|{smas}"
+                f"|{rsi_val:.1f}|{horizon}|{label}"
+            )
+            return
+        
         # 6. Confidence gate
         if cv_accuracy < MIN_ACCURACY:
             log_prediction(ticker, horizon, price, "NO_EDGE",
