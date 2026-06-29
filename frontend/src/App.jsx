@@ -18,7 +18,7 @@ import WatchlistPage     from "./WatchlistPage";
 //import ComparePage       from "./ComparePage";
 import EducationPage     from "./EducationPage";
 import PredictionLogPage from "./PredictionLogPage";
-import AboutPage         from "./AboutPage";
+//import AboutPage         from "./AboutPage";
 
 // ── Nav link with icon ───────────────────────────────────────────────────────
 const NavLink = ({ to, label, icon: Icon, current }) => (
@@ -120,12 +120,16 @@ export default function App() {
               icon={ClipboardList}
               current={location.pathname}
             />
+            
+            {/*}
             <NavLink
               to="/profile"
               label="About"
               icon={Info}
               current={location.pathname}
             />
+            */}
+
           </div>
         </nav>
 
@@ -139,7 +143,11 @@ export default function App() {
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/education" element={<EducationPage />} />
               <Route path="/log" element={<PredictionLogPage />} />
+
+              {/*}
               <Route path="/profile" element={<AboutPage />} />
+              */}
+
             </Routes>
           </PageWrapper>
         </main>
@@ -159,12 +167,16 @@ export default function App() {
             <Link to="/log" className="hover:text-blue-400 transition-colors">
               Signal Log
             </Link>
+
+            {/*}
             <Link
               to="/profile"
               className="hover:text-blue-400 transition-colors"
             >
               About
             </Link>
+            */}
+            
           </div>
           <p>Ruppin Academic Center · Mobile App Development · 2026</p>
           <p className="text-slate-700 text-xs mt-1">
