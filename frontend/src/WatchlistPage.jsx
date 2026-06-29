@@ -12,7 +12,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { ResponsiveContainer, LineChart, Line } from "recharts";
 
-const API = "https://stockpredict-api-rslan.azurewebsites.net";
+const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
 
 const VERDICT_STYLE = {
   BUY: {
@@ -196,17 +196,10 @@ export default function WatchlistPage() {
     fetchLive(ticker, h);
   };
 
-  // ── On mount ─────────────────────────────────────────────────────────────
+  // ── On mount — load saved tickers from DB only, no auto live-fetch ──────
   useEffect(() => {
     fetchWatchlist();
   }, [fetchWatchlist]);
-
-  useEffect(() => {
-    if (saved.length > 0) {
-      refreshAll(saved.map((s) => s.ticker));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved]);
 
   // ── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = async (ticker) => {
@@ -244,7 +237,9 @@ export default function WatchlistPage() {
                   Fetching live prices…
                 </span>
               ) : (
-                <span className="text-slate-600">Live prices loaded</span>
+                <span className="text-slate-600">
+                  Showing saved data · click Refresh All for live prices
+                </span>
               )}
             </p>
           </div>
@@ -451,9 +446,9 @@ export default function WatchlistPage() {
         {/* ── Footer note ─────────────────────────────────────────────── */}
         {!loadingDb && saved.length > 0 && (
           <p className="text-slate-700 text-[11px] text-center mt-6">
-            Live prices fetched on load and on refresh. Select a horizon per
-            ticker to see the prediction for that timeframe. Price delta shows
-            change since you added the stock.
+            Saved data loads instantly from the database. Click Refresh All to
+            fetch live prices and updated signals from the model. Price delta
+            shows change since you added the stock.
           </p>
         )}
       </div>
