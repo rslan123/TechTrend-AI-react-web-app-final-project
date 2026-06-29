@@ -1,67 +1,83 @@
 /**
  * WatchlistPage.jsx
  * ------------------
- * Displays all tickers saved by the user.
- * On load, fetches live price + prediction data for each saved ticker
- * so the user can see current price, direction, and a sparkline —
- * not just a static saved snapshot.
- *
- * Backend endpoints used:
- *   GET    /api/watchlist           → [{id, ticker, price, verdict}, ...]
- *   DELETE /api/watchlist/:ticker   → removes one entry
- *   GET    /api/predict/:ticker     → live prediction (for refresh)
+ * Updated for multi-horizon predictor:
+ *   - Each card has a horizon selector (defaults to 1h)
+ *   - Live fetch uses /api/predict/:ticker/:horizon
+ *   - parsePredictResult handles new 12-field pipe format
+ *   - All existing features intact: sparkline, price delta, RSI, delete, refresh
  */
 
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  Tooltip,
-} from "recharts";
+import { ResponsiveContainer, LineChart, Line } from "recharts";
 
-  const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
+const API = "https://stockpredict-api-rslan.azurewebsites.net";
 
-// ── Verdict config (matches PredictorPage) ───────────────────────────────────
 const VERDICT_STYLE = {
-  BUY:     { text: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30", line: "#10b981" },
-  SELL:    { text: "text-rose-400",    bg: "bg-rose-500/10    border-rose-500/30",    line: "#f43f5e" },
-  HOLD:    { text: "text-amber-400",   bg: "bg-amber-500/10   border-amber-500/30",   line: "#f59e0b" },
-  NO_EDGE: { text: "text-slate-400",   bg: "bg-slate-700/30   border-slate-600/30",   line: "#64748b" },
+  BUY: {
+    text: "text-emerald-400",
+    bg: "bg-emerald-500/10 border-emerald-500/30",
+    line: "#10b981",
+  },
+  SELL: {
+    text: "text-rose-400",
+    bg: "bg-rose-500/10    border-rose-500/30",
+    line: "#f43f5e",
+  },
+  HOLD: {
+    text: "text-amber-400",
+    bg: "bg-amber-500/10   border-amber-500/30",
+    line: "#f59e0b",
+  },
+  NO_EDGE: {
+    text: "text-slate-400",
+    bg: "bg-slate-700/30   border-slate-600/30",
+    line: "#64748b",
+  },
 };
 
-// ── Parse the RESULT pipe string from the predict endpoint ───────────────────
+const HORIZONS = [
+  { key: "1h", label: "1H" },
+  { key: "1d", label: "1D" },
+  { key: "1wk", label: "1W" },
+  { key: "1mo", label: "1M" },
+  { key: "6mo", label: "6M" },
+  { key: "1y", label: "1Y" },
+];
+
+// ── Parse RESULT pipe string — handles both 10-field (old) and 12-field (new) ──
 function parsePredictResult(raw) {
   if (!raw || typeof raw !== "string") return null;
   const parts = raw.split("|");
   if (parts[0] !== "RESULT") return null;
 
-  const prices = parts[7]?.split(",") ?? [];
-  const smas   = parts[8]?.split(",") ?? [];
+  const prices = (parts[7] ?? "").split(",");
+  const smas = (parts[8] ?? "").split(",");
 
   return {
-    ticker:     parts[1],
-    price:      parseFloat(parts[2]),
-    verdict:    parts[3],
+    ticker: parts[1],
+    price: parseFloat(parts[2]),
+    verdict: parts[3],
     confidence: parts[4],
-    cv:         parts[5],
-    rsi:        parseFloat(parts[9]),
-    // Sparkline only needs price points — keep it light
-    history: prices.map((v, i) => ({
-      price: parseFloat(v),
-      sma:   parseFloat(smas[i]),
-    })),
+    cv: parts[5],
+    rsi: parseFloat(parts[9] ?? 50),
+    horizon: parts[10] ?? "1h",
+    horizonLabel: parts[11] ?? "1 Hour",
+    history: prices
+      .map((v, i) => ({ price: parseFloat(v), sma: parseFloat(smas[i] ?? 0) }))
+      .filter((d) => !isNaN(d.price)),
   };
 }
 
-// ── Mini sparkline (no axes, no tooltip clutter) ─────────────────────────────
+// ── Mini sparkline ───────────────────────────────────────────────────────────
 function Sparkline({ data, color }) {
-  if (!data?.length) return (
-    <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">
-      No data
-    </div>
-  );
+  if (!data?.length)
+    return (
+      <div className="w-full h-full flex items-center justify-center text-slate-700 text-xs">
+        No data
+      </div>
+    );
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
@@ -78,24 +94,27 @@ function Sparkline({ data, color }) {
   );
 }
 
-// ── Price delta badge ────────────────────────────────────────────────────────
-// Compares saved price (when user added to watchlist) with current live price
+// ── Price delta vs saved price ───────────────────────────────────────────────
 function PriceDelta({ saved, current }) {
   if (!saved || !current) return null;
-  const savedF   = parseFloat(saved);
-  const diff     = current - savedF;
-  const pct      = ((diff / savedF) * 100).toFixed(2);
+  const diff = current - parseFloat(saved);
+  const pct = ((diff / parseFloat(saved)) * 100).toFixed(2);
   const positive = diff >= 0;
   return (
-    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-      positive ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
-    }`}>
-      {positive ? "+" : ""}{pct}%
+    <span
+      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+        positive
+          ? "bg-emerald-500/10 text-emerald-400"
+          : "bg-rose-500/10 text-rose-400"
+      }`}
+    >
+      {positive ? "+" : ""}
+      {pct}%
     </span>
   );
 }
 
-// ── Skeleton card shown while loading ────────────────────────────────────────
+// ── Skeleton card ────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
     <div className="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-5 animate-pulse">
@@ -117,16 +136,16 @@ function SkeletonCard() {
 
 // ── Main component ───────────────────────────────────────────────────────────
 export default function WatchlistPage() {
-  // saved: raw DB rows [{id, ticker, price, verdict}]
-  const [saved, setSaved]       = useState([]);
-  // live: map of ticker → parsed prediction result
-  const [live, setLive]         = useState({});
-  const [loadingDb, setLoadingDb]     = useState(true);
+  const [saved, setSaved] = useState([]);
+  const [live, setLive] = useState({});
+  // Per-ticker selected horizon
+  const [horizons, setHorizons] = useState({});
+  const [loadingDb, setLoadingDb] = useState(true);
   const [loadingLive, setLoadingLive] = useState({});
   const [deletingTicker, setDeletingTicker] = useState(null);
-  const [error, setError]       = useState(null);
+  const [error, setError] = useState(null);
 
-  // ── Step 1: Load saved tickers from DB ─────────────────────────────────
+  // ── Load watchlist from DB ───────────────────────────────────────────────
   const fetchWatchlist = useCallback(async () => {
     setLoadingDb(true);
     setError(null);
@@ -140,50 +159,66 @@ export default function WatchlistPage() {
     }
   }, []);
 
-  // ── Step 2: Fetch live prediction for one ticker ────────────────────────
-  const fetchLive = useCallback(async (ticker) => {
-    setLoadingLive(prev => ({ ...prev, [ticker]: true }));
+  // ── Fetch live prediction for one ticker + horizon ───────────────────────
+  const fetchLive = useCallback(async (ticker, horizon = "1h") => {
+    setLoadingLive((prev) => ({ ...prev, [ticker]: true }));
     try {
-      const res = await axios.get(`${API}/api/predict/${ticker}?source=auto`);
-;
-      const rawData = res.data.raw || res.data;
-      const parsed  = parsePredictResult(typeof rawData === "string" ? rawData : null);
+      const res = await axios.get(
+        `${API}/api/predict/${ticker}/${horizon}?source=auto`,
+      );
+      const rawData = res.data?.raw ?? res.data;
+      const parsed = parsePredictResult(
+        typeof rawData === "string" ? rawData : null,
+      );
       if (parsed) {
-        setLive(prev => ({ ...prev, [ticker]: parsed }));
+        setLive((prev) => ({ ...prev, [ticker]: parsed }));
       }
     } catch {
-      // Silently fail per ticker — show saved data as fallback
+      // Silently fail — show saved data as fallback
     } finally {
-      setLoadingLive(prev => ({ ...prev, [ticker]: false }));
+      setLoadingLive((prev) => ({ ...prev, [ticker]: false }));
     }
   }, []);
 
-  // ── Step 3: Refresh all live prices ────────────────────────────────────
-  const refreshAll = useCallback(async (tickers) => {
-    // Stagger requests slightly so we don't hammer the backend
-    for (const ticker of tickers) {
-      await fetchLive(ticker);
-    }
-  }, [fetchLive]);
+  // ── Refresh all tickers ──────────────────────────────────────────────────
+  const refreshAll = useCallback(
+    async (tickers) => {
+      for (const ticker of tickers) {
+        await fetchLive(ticker, horizons[ticker] ?? "1h");
+      }
+    },
+    [fetchLive, horizons],
+  );
 
-  // ── On mount: load DB, then kick off live fetches ───────────────────────
+  // ── Change horizon for one card and re-fetch ─────────────────────────────
+  const changeHorizon = (ticker, h) => {
+    setHorizons((prev) => ({ ...prev, [ticker]: h }));
+    fetchLive(ticker, h);
+  };
+
+  // ── On mount ─────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchWatchlist();
   }, [fetchWatchlist]);
 
   useEffect(() => {
     if (saved.length > 0) {
-      refreshAll(saved.map(s => s.ticker));
+      refreshAll(saved.map((s) => s.ticker));
     }
-  }, [saved, refreshAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
-  // ── Delete ──────────────────────────────────────────────────────────────
+  // ── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = async (ticker) => {
     setDeletingTicker(ticker);
     try {
       await axios.delete(`${API}/api/watchlist/${ticker}`);
-      setSaved(prev => prev.filter(s => s.ticker !== ticker));
-      setLive(prev => { const n = { ...prev }; delete n[ticker]; return n; });
+      setSaved((prev) => prev.filter((s) => s.ticker !== ticker));
+      setLive((prev) => {
+        const n = { ...prev };
+        delete n[ticker];
+        return n;
+      });
     } catch {
       alert("Failed to remove from watchlist.");
     } finally {
@@ -191,79 +226,91 @@ export default function WatchlistPage() {
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────
   const anyLiveLoading = Object.values(loadingLive).some(Boolean);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl">
-
-        {/* Header */}
+        {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
           <div>
-            <h2 className="text-3xl font-extrabold text-white tracking-tight">Watchlist</h2>
+            <h2 className="text-3xl font-extrabold text-white tracking-tight">
+              Watchlist
+            </h2>
             <p className="text-slate-500 text-sm mt-1">
               {saved.length} ticker{saved.length !== 1 ? "s" : ""} saved ·{" "}
               {anyLiveLoading ? (
-                <span className="text-blue-400 animate-pulse">Fetching live prices…</span>
+                <span className="text-blue-400 animate-pulse">
+                  Fetching live prices…
+                </span>
               ) : (
                 <span className="text-slate-600">Live prices loaded</span>
               )}
             </p>
           </div>
 
-          {/* Refresh button */}
           {saved.length > 0 && (
             <button
-              onClick={() => refreshAll(saved.map(s => s.ticker))}
+              onClick={() => refreshAll(saved.map((s) => s.ticker))}
               disabled={anyLiveLoading}
               className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700
                          disabled:opacity-40 text-slate-300 text-sm font-bold
                          px-5 py-2.5 rounded-xl border border-slate-700 transition-all"
             >
-              <span className={anyLiveLoading ? "animate-spin inline-block" : ""}>↻</span>
-              Refresh Prices
+              <span
+                className={anyLiveLoading ? "animate-spin inline-block" : ""}
+              >
+                ↻
+              </span>
+              Refresh All
             </button>
           )}
         </div>
 
-        {/* Error */}
+        {/* ── Error ──────────────────────────────────────────────────── */}
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/40 text-rose-400
-                          rounded-2xl px-5 py-4 mb-6 text-sm font-mono">
+          <div
+            className="bg-rose-500/10 border border-rose-500/40 text-rose-400
+                          rounded-2xl px-5 py-4 mb-6 text-sm font-mono"
+          >
             ⚠ {error}
           </div>
         )}
 
-        {/* Loading skeletons */}
+        {/* ── Loading skeletons ───────────────────────────────────────── */}
         {loadingDb && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+            {[...Array(4)].map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         )}
 
-        {/* Empty state */}
+        {/* ── Empty state ─────────────────────────────────────────────── */}
         {!loadingDb && saved.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="text-5xl mb-4 opacity-30">⭐</div>
-            <p className="text-slate-400 font-bold text-lg">Your watchlist is empty</p>
+            <p className="text-slate-400 font-bold text-lg">
+              Your watchlist is empty
+            </p>
             <p className="text-slate-600 text-sm mt-2 max-w-xs">
-              Run a prediction on any stock and hit "Add to Watchlist" to track it here.
+              Run a prediction on any stock and hit "Add to Watchlist" to track
+              it here.
             </p>
           </div>
         )}
 
-        {/* Ticker cards grid */}
+        {/* ── Cards grid ─────────────────────────────────────────────── */}
         {!loadingDb && saved.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {saved.map((row) => {
-              const liveData    = live[row.ticker];
+              const liveData = live[row.ticker];
               const isRefreshing = loadingLive[row.ticker];
-              const isDeleting  = deletingTicker === row.ticker;
+              const isDeleting = deletingTicker === row.ticker;
+              const activeH = horizons[row.ticker] ?? "1h";
 
-              // Use live verdict if available, fall back to saved
-              const verdict  = liveData?.verdict ?? row.verdict ?? "HOLD";
-              const vstyle   = VERDICT_STYLE[verdict] ?? VERDICT_STYLE.HOLD;
+              const verdict = liveData?.verdict ?? row.verdict ?? "HOLD";
+              const vstyle = VERDICT_STYLE[verdict] ?? VERDICT_STYLE.HOLD;
               const livePrice = liveData?.price;
 
               return (
@@ -271,17 +318,22 @@ export default function WatchlistPage() {
                   key={row.ticker}
                   className={`bg-slate-800/40 border border-slate-700/40 rounded-2xl p-5
                               transition-all duration-300
-                              ${isDeleting ? "opacity-40 scale-95" : "hover:border-slate-600/60"}`}
+                              ${
+                                isDeleting
+                                  ? "opacity-40 scale-95"
+                                  : "hover:border-slate-600/60"
+                              }`}
                 >
-                  {/* Top row: ticker + verdict badge + delete */}
+                  {/* Top row: ticker + verdict + delete */}
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-white font-mono font-extrabold text-xl">
                           {row.ticker}
                         </span>
-                        {/* Live price delta vs saved price */}
-                        {livePrice && <PriceDelta saved={row.price} current={livePrice} />}
+                        {livePrice && (
+                          <PriceDelta saved={row.price} current={livePrice} />
+                        )}
                       </div>
                       <p className="text-slate-500 text-xs mt-0.5">
                         Saved at ${parseFloat(row.price).toFixed(2)}
@@ -289,11 +341,12 @@ export default function WatchlistPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* Verdict badge */}
-                      <span className={`text-xs font-bold px-3 py-1 rounded-full border ${vstyle.bg} ${vstyle.text}`}>
+                      <span
+                        className={`text-xs font-bold px-3 py-1 rounded-full border
+                                    ${vstyle.bg} ${vstyle.text}`}
+                      >
                         {verdict.replace("_", " ")}
                       </span>
-                      {/* Delete */}
                       <button
                         onClick={() => handleDelete(row.ticker)}
                         disabled={isDeleting}
@@ -306,46 +359,86 @@ export default function WatchlistPage() {
                     </div>
                   </div>
 
+                  {/* Horizon selector */}
+                  <div className="flex gap-1 mb-3">
+                    {HORIZONS.map((h) => (
+                      <button
+                        key={h.key}
+                        onClick={() => changeHorizon(row.ticker, h.key)}
+                        disabled={isRefreshing}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg border
+                                    transition-all disabled:opacity-40
+                          ${
+                            activeH === h.key
+                              ? "bg-blue-600 border-blue-500 text-white"
+                              : "bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300"
+                          }`}
+                      >
+                        {h.label}
+                      </button>
+                    ))}
+                    {liveData?.horizonLabel && (
+                      <span className="text-slate-600 text-[10px] ml-auto self-center">
+                        {liveData.horizonLabel}
+                      </span>
+                    )}
+                  </div>
+
                   {/* Sparkline */}
                   <div className="h-16 w-full mb-3 relative">
                     {isRefreshing ? (
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-slate-600 text-xs animate-pulse">Loading chart…</div>
+                        <div className="text-slate-600 text-xs animate-pulse">
+                          Loading…
+                        </div>
                       </div>
                     ) : (
                       <Sparkline data={liveData?.history} color={vstyle.line} />
                     )}
                   </div>
 
-                  {/* Bottom row: live price + RSI + confidence */}
-                  <div className="flex items-center justify-between text-xs border-t border-slate-700/40 pt-3">
-                    <div className="flex items-center gap-3">
-                      {/* Live price */}
+                  {/* Bottom: live price + RSI + confidence */}
+                  <div
+                    className="flex items-center justify-between text-xs
+                                  border-t border-slate-700/40 pt-3"
+                  >
+                    <div className="flex items-center gap-4">
                       <div>
-                        <p className="text-slate-500 text-[10px] uppercase tracking-wider">Live Price</p>
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider">
+                          Live Price
+                        </p>
                         <p className="text-white font-mono font-bold">
                           {livePrice ? `$${livePrice.toFixed(2)}` : "—"}
                         </p>
                       </div>
-                      {/* RSI */}
                       {liveData?.rsi && (
                         <div>
-                          <p className="text-slate-500 text-[10px] uppercase tracking-wider">RSI</p>
-                          <p className={`font-bold ${
-                            liveData.rsi > 70 ? "text-rose-400" :
-                            liveData.rsi < 30 ? "text-emerald-400" : "text-slate-300"
-                          }`}>
+                          <p className="text-slate-500 text-[10px] uppercase tracking-wider">
+                            RSI
+                          </p>
+                          <p
+                            className={`font-bold ${
+                              liveData.rsi > 70
+                                ? "text-rose-400"
+                                : liveData.rsi < 30
+                                  ? "text-emerald-400"
+                                  : "text-slate-300"
+                            }`}
+                          >
                             {liveData.rsi.toFixed(1)}
                           </p>
                         </div>
                       )}
                     </div>
 
-                    {/* Confidence */}
                     {liveData?.confidence && liveData.confidence !== "N/A" && (
                       <div className="text-right">
-                        <p className="text-slate-500 text-[10px] uppercase tracking-wider">Confidence</p>
-                        <p className="text-blue-400 font-bold">{liveData.confidence}</p>
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider">
+                          Confidence
+                        </p>
+                        <p className="text-blue-400 font-bold">
+                          {liveData.confidence}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -355,14 +448,14 @@ export default function WatchlistPage() {
           </div>
         )}
 
-        {/* Footer note */}
+        {/* ── Footer note ─────────────────────────────────────────────── */}
         {!loadingDb && saved.length > 0 && (
           <p className="text-slate-700 text-[11px] text-center mt-6">
-            Live prices are fetched on page load and on refresh.
-            Price delta shows change since you added the ticker.
+            Live prices fetched on load and on refresh. Select a horizon per
+            ticker to see the prediction for that timeframe. Price delta shows
+            change since you added the stock.
           </p>
         )}
-
       </div>
     </div>
   );

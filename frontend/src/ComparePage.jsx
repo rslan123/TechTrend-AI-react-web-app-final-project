@@ -27,7 +27,7 @@ import {
 } from "recharts";
 import { SP500_TICKERS } from "./sp500tickers";
 
-const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
+const API = "https://stockpredict-api-rslan.azurewebsites.net";
 
 // ── Colors for left vs right ticker ─────────────────────────────────────────
 const SIDE = {

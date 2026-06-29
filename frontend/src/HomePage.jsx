@@ -15,7 +15,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
-const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
+const API = "https://stockpredict-api-rslan.azurewebsites.net";
 
 const STRIP_TICKERS = ["NVDA", "TSLA"];
 
