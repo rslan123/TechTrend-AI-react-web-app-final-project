@@ -342,10 +342,10 @@ export default function PredictorPage() {
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div>
           <h2 className="text-3xl font-extrabold text-white tracking-tight">
-            AI Predictor
+            AI stock forecast for S&P 500 companies
           </h2>
           <p className="text-slate-500 text-sm mt-1">
-            XGBoost · TimeSeriesSplit CV · NO_EDGE confidence gate · S&P 500
+            Select a ticker and time range to forecast S&P 500 stock movements
           </p>
         </div>
 
