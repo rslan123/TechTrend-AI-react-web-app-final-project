@@ -12,7 +12,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { ResponsiveContainer, LineChart, Line } from "recharts";
 
-const API = "https://techtrend-ai-react-web-app-final-project.onrender.com";
+const API = "https://stockpredict-api-rslan.azurewebsites.net";
 
 const VERDICT_STYLE = {
   BUY: {
