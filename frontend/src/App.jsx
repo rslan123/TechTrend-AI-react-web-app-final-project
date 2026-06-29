@@ -15,7 +15,7 @@ import {
 import HomePage          from "./HomePage";
 import PredictorPage     from "./PredictorPage";
 import WatchlistPage     from "./WatchlistPage";
-import ComparePage       from "./ComparePage";
+//import ComparePage       from "./ComparePage";
 import EducationPage     from "./EducationPage";
 import PredictionLogPage from "./PredictionLogPage";
 import AboutPage         from "./AboutPage";
@@ -67,10 +67,11 @@ export default function App() {
       `}</style>
 
       <div className="min-h-screen flex flex-col bg-slate-950 text-slate-50">
-
         {/* ── Navigation ─────────────────────────────────────────────── */}
-        <nav className="border-b border-slate-800 px-4 py-3 flex items-center
-                        justify-between bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+        <nav
+          className="border-b border-slate-800 px-4 py-3 flex items-center
+                        justify-between bg-slate-900/80 backdrop-blur-md sticky top-0 z-50"
+        >
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <div className="bg-blue-600 p-1.5 rounded-lg">
@@ -82,15 +83,49 @@ export default function App() {
           </Link>
 
           {/* Nav links */}
-          <div className="flex gap-1 overflow-x-auto
-                          [scrollbar-width:none] [-ms-overflow-style:none]">
-            <NavLink to="/"          label="Home"       icon={Home}          current={location.pathname} />
-            <NavLink to="/predict"   label="Predictor"  icon={TrendingUp}    current={location.pathname} />
-            <NavLink to="/compare"   label="Compare"    icon={GitCompare}    current={location.pathname} />
-            <NavLink to="/watchlist" label="Watchlist"  icon={Star}          current={location.pathname} />
-            <NavLink to="/education" label="Learn"      icon={BookOpen}      current={location.pathname} />
-            <NavLink to="/log"       label="Signal Log" icon={ClipboardList} current={location.pathname} />
-            <NavLink to="/profile"   label="About"      icon={Info}          current={location.pathname} />
+          <div
+            className="flex gap-1 overflow-x-auto
+                          [scrollbar-width:none] [-ms-overflow-style:none]"
+          >
+            <NavLink
+              to="/"
+              label="Home"
+              icon={Home}
+              current={location.pathname}
+            />
+            <NavLink
+              to="/predict"
+              label="Predictor"
+              icon={TrendingUp}
+              current={location.pathname}
+            />
+
+            {/*<NavLink to="/compare"   label="Compare"    icon={GitCompare}    current={location.pathname} />*/}
+
+            <NavLink
+              to="/watchlist"
+              label="Watchlist"
+              icon={Star}
+              current={location.pathname}
+            />
+            <NavLink
+              to="/education"
+              label="Learn"
+              icon={BookOpen}
+              current={location.pathname}
+            />
+            <NavLink
+              to="/log"
+              label="Signal Log"
+              icon={ClipboardList}
+              current={location.pathname}
+            />
+            <NavLink
+              to="/profile"
+              label="About"
+              icon={Info}
+              current={location.pathname}
+            />
           </div>
         </nav>
 
@@ -98,29 +133,44 @@ export default function App() {
         <main className="flex-1 container mx-auto p-4 md:p-6 max-w-7xl">
           <PageWrapper locationKey={location.pathname}>
             <Routes location={location}>
-              <Route path="/"          element={<HomePage />}          />
-              <Route path="/predict"   element={<PredictorPage />}     />
-              <Route path="/compare"   element={<ComparePage />}       />
-              <Route path="/watchlist" element={<WatchlistPage />}     />
-              <Route path="/education" element={<EducationPage />}     />
-              <Route path="/log"       element={<PredictionLogPage />} />
-              <Route path="/profile"   element={<AboutPage />}         />
+              <Route path="/" element={<HomePage />} />
+              <Route path="/predict" element={<PredictorPage />} />
+              {/*<Route path="/compare" element={<ComparePage />} />*/}
+              <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/education" element={<EducationPage />} />
+              <Route path="/log" element={<PredictionLogPage />} />
+              <Route path="/profile" element={<AboutPage />} />
             </Routes>
           </PageWrapper>
         </main>
 
         {/* ── Footer ─────────────────────────────────────────────────── */}
-        <footer className="border-t border-slate-800 px-6 py-8
-                           text-center text-slate-600 text-sm">
+        <footer
+          className="border-t border-slate-800 px-6 py-8
+                           text-center text-slate-600 text-sm"
+        >
           <div className="flex justify-center gap-6 mb-3 flex-wrap">
-            <Link to="/education" className="hover:text-blue-400 transition-colors">Market School</Link>
-            <Link to="/log"       className="hover:text-blue-400 transition-colors">Signal Log</Link>
-            <Link to="/profile"   className="hover:text-blue-400 transition-colors">About</Link>
+            <Link
+              to="/education"
+              className="hover:text-blue-400 transition-colors"
+            >
+              Market School
+            </Link>
+            <Link to="/log" className="hover:text-blue-400 transition-colors">
+              Signal Log
+            </Link>
+            <Link
+              to="/profile"
+              className="hover:text-blue-400 transition-colors"
+            >
+              About
+            </Link>
           </div>
           <p>Ruppin Academic Center · Mobile App Development · 2026</p>
-          <p className="text-slate-700 text-xs mt-1">For educational purposes only. Not financial advice.</p>
+          <p className="text-slate-700 text-xs mt-1">
+            For educational purposes only. Not financial advice.
+          </p>
         </footer>
-
       </div>
     </>
   );

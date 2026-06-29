@@ -225,6 +225,8 @@ export default function HomePage() {
           >
             Run a Prediction
           </Link>
+
+          {/*
           <Link
             to="/compare"
             className="bg-slate-800 hover:bg-slate-700 text-white font-bold
@@ -233,6 +235,8 @@ export default function HomePage() {
           >
             Compare Two Stocks
           </Link>
+          */}
+
           <Link
             to="/education"
             className="text-slate-400 hover:text-white font-bold px-6 py-3.5
@@ -439,6 +443,8 @@ export default function HomePage() {
           desc="Direction signals with confidence scoring across six time horizons."
           to="/predict"
         />
+
+          {/*}
         <Feature
           Icon={GitCompare}
           iconColor="#a855f7"
@@ -446,6 +452,9 @@ export default function HomePage() {
           desc="Side-by-side momentum comparison with overlay chart and head-to-head metrics."
           to="/compare"
         />
+          */}
+
+          
         <Feature
           Icon={Star}
           iconColor="#f59e0b"
