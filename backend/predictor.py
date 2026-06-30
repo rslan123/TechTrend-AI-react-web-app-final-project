@@ -218,7 +218,7 @@ def load_or_train_model(ticker: str, horizon: str,
         n_estimators=50, max_depth=3,
         learning_rate=0.1, eval_metric='logloss', verbosity=0
     )
-    m.fit(X.iloc[:-1], y.iloc[:-1])
+    m.fit(X, y)
     joblib.dump(m, path)
     return m, True
 
