@@ -266,27 +266,30 @@ export default function HomePage() {
             iconColor="#3b82f6"
             step={1}
             title="Data Acquisition"
-            desc="60 days of hourly OHLCV data fetched from Yahoo Finance for any high-liquidity S&P 500 stock."
+            desc="Historical stock data from Yahoo Finance, 
+            automatically adjusting the data depth and detail based on your forecasting goal—ranging 
+            from short-term (60 days of hourly data) to long-term (10 years of weekly data)"
           />
           <PipelineStep
             icon={Activity}
             iconColor="#a855f7"
             step={2}
             title="Feature Engineering"
-            desc="Eight technical indicators calculated per bar: SMA-20, RSI, ATR, Bollinger Band position, Rate of Change, Volume Ratio, Price-vs-SMA, and period unit."
+            desc="Eight technical market indicators per data bar (including trend, momentum, volatility, 
+            and volume) to provide the machine learning model with a multi-dimensional view of price action"
           />
           <PipelineStep
             icon={Cpu}
             iconColor="#10b981"
             step={3}
-            title="XGBoost Classifier"
-            desc="An ensemble of decision trees trained on the feature set, validated with TimeSeriesSplit cross-validation to prevent data leakage."
+            title="Adaptive Machine Learning"
+            desc="An ensemble of decision trees trained on the feature set,The system utilizes sequential time-series cross-validation to ensure reliable testing without looking ahead into future data"
           />
           <PipelineStep
             icon={ShieldCheck}
             iconColor="#f59e0b"
             step={4}
-            title="Confidence Gate"
+            title="Strict Confidence Gate"
             desc="If cross-validated accuracy falls below 53%, the system outputs NO_EDGE instead of a signal. The model abstains when it has no meaningful edge."
             last
           />
@@ -444,7 +447,7 @@ export default function HomePage() {
           to="/predict"
         />
 
-          {/*}
+        {/*}
         <Feature
           Icon={GitCompare}
           iconColor="#a855f7"
@@ -454,7 +457,6 @@ export default function HomePage() {
         />
           */}
 
-          
         <Feature
           Icon={Star}
           iconColor="#f59e0b"
